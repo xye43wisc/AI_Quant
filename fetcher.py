@@ -29,7 +29,16 @@ def fetch_raw(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
     return df[['trade_date', 'open', 'high', 'low', 'close', 'volume']]
 
 def determine_market(symbol: str) -> str:
-    return 'sh' if symbol.startswith('6') else 'sz'
+    """
+    Determine the market based on the stock symbol prefix.
+    """
+    if symbol.startswith('6'):
+        return 'sh'
+    elif symbol.startswith('0') or symbol.startswith('3'):
+        return 'sz'
+    elif symbol.startswith('8') or symbol.startswith('4') or symbol.startswith('9'):
+        return 'bj'
+    return 'sz'  # Default to Shenzhen market
 
 def fetch_qfq_factor(symbol: str) -> pd.DataFrame:
     market = determine_market(symbol)
