@@ -3,20 +3,17 @@ from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker, Session as SessionType
 from sqlalchemy.dialects.postgresql import insert
 from config import settings
-from models import Base, DailyBar, AdjFactor
-from typing import Dict, List
+from models import Base, DailyBar, AdjFactor, CleaningLog # 导入 CleaningLog
+from typing import Dict, List, Optional
+from datetime import date
 
 # Initialize the database connection
 en= create_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
 Session = sessionmaker(bind=en)
-Base.metadata.create_all(en)
+Base.metadata.create_all(en) # 这将自动创建包括 cleaning_log 在内的新表
 
 def get_all_last_dates() -> Dict[str, str]:
-    """
-    一次性获取数据库中所有 symbol 的最后一个交易日。
-    这个版本利用了 (symbol, trade_date) 上的索引，性能最佳。
-    注意：此函数要求数据库的 max_locks_per_transaction 配置足够大。
-    """
+    # ... (此函数保持不变)
     session = Session()
     try:
         results = (
@@ -24,15 +21,12 @@ def get_all_last_dates() -> Dict[str, str]:
                    .group_by(DailyBar.symbol)
                    .all()
         )
-        return {symbol: date.strftime("%Y%m%d") for symbol, date in results}
+        return {symbol: date_obj.strftime("%Y%m%d") for symbol, date_obj in results}
     finally:
         session.close()
 
-
 def upsert_bars(df, symbol: str, session: SessionType):
-    """
-    使用传入的 session 批量 upsert 日线数据
-    """
+    # ... (此函数保持不变)
     data = [
         {
             'symbol': symbol,
@@ -52,11 +46,8 @@ def upsert_bars(df, symbol: str, session: SessionType):
     stmt = stmt.on_conflict_do_nothing(index_elements=['symbol', 'trade_date'])
     session.execute(stmt)
 
-
 def upsert_factors(df, symbol: str, session: SessionType):
-    """
-    使用传入的 session 批量 upsert 复权因子数据
-    """
+    # ... (此函数保持不变)
     data = [
         {
             'symbol': symbol,
@@ -76,5 +67,25 @@ def upsert_factors(df, symbol: str, session: SessionType):
             'forward_factor': stmt.excluded.forward_factor,
             'back_factor': stmt.excluded.back_factor
         }
+    )
+    session.execute(stmt)
+
+# --- 新增函数 ---
+
+def get_last_cleaned_dates() -> Dict[str, date]:
+    """一次性获取所有 symbol 的最后清洗日期。"""
+    session = Session()
+    try:
+        results = session.query(CleaningLog.symbol, CleaningLog.last_cleaned_date).all()
+        return {symbol: date_obj for symbol, date_obj in results}
+    finally:
+        session.close()
+
+def update_cleaning_log(symbol: str, latest_date: date, session: SessionType):
+    """使用传入的 session 来 upsert 清洗日志。"""
+    stmt = insert(CleaningLog).values(symbol=symbol, last_cleaned_date=latest_date)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=['symbol'],
+        set_={'last_cleaned_date': stmt.excluded.last_cleaned_date}
     )
     session.execute(stmt)

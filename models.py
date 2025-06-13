@@ -24,3 +24,9 @@ class AdjFactor(Base):
     forward_factor  = Column(Float)
     back_factor     = Column(Float)
     __table_args__ = (PrimaryKeyConstraint("symbol", "trade_date"),)
+
+# 新增 CleaningLog 模型
+class CleaningLog(Base):
+    __tablename__ = "cleaning_log"
+    symbol            = Column(String(10), primary_key=True, nullable=False)
+    last_cleaned_date = Column(Date, nullable=False)
