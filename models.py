@@ -1,10 +1,14 @@
 # models.py
 from sqlalchemy import (
-    Column, String, Date, Float, BigInteger, PrimaryKeyConstraint, create_engine
+    Column, String, Date, Float, BigInteger, PrimaryKeyConstraint, create_engine,
+    Index, Integer, DateTime
 )
 from sqlalchemy.orm import declarative_base
 from config import settings
+from datetime import datetime
+import logging
 
+logger = logging.getLogger(__name__)
 Base = declarative_base()
 
 # --- 1. 模型列定义 (Mixins) ---
@@ -38,6 +42,19 @@ class SuspensionInfo(Base):
     symbol          = Column(String(10), nullable=False, primary_key=True)
     suspension_date = Column(Date, nullable=False, primary_key=True)
 
+class DataIssueLog(Base):
+    __tablename__ = 'data_issue_log'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    check_run_ts = Column(DateTime, default=datetime.utcnow, index=True)
+    check_type = Column(String(50), nullable=False, index=True)
+    symbol = Column(String(10), nullable=False, index=True)
+    trade_date = Column(Date, nullable=False)
+    severity = Column(String(20))
+    issue = Column(String(100))
+    details = Column(String(500))
+    __table_args__ = (Index('ix_issue_symbol_date_type', 'symbol', 'trade_date', 'check_type'),)
+
+
 # --- 3. 动态模型工厂 ---
 _KNOWN_SOURCES = ['akshare', 'baostock']
 _MODELS_CACHE = {}
@@ -67,7 +84,7 @@ _create_dynamic_models()
 
 # --- 4. 数据库初始化辅助函数 ---
 def create_all_tables():
-    print("Connecting to database to create all tables...")
+    logger.info("Connecting to database to create all tables...")
     engine = create_engine(settings.DATABASE_URL)
     Base.metadata.create_all(engine)
-    print("All tables are created or already exist.")
+    logger.info("All tables are created or already exist.")

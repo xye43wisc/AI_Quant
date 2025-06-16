@@ -3,8 +3,10 @@ import pandas as pd
 import baostock as bs
 from typing import Tuple
 from datetime import date
-
+import logging
 from .base_source import BaseSource
+
+logger = logging.getLogger(__name__)
 
 class BaostockSource(BaseSource):
     """使用 Baostock 作为数据源的实现。"""
@@ -22,7 +24,14 @@ class BaostockSource(BaseSource):
         bs.logout()
 
     def _convert_symbol_format(self, symbol: str) -> str:
-        return f"sh.{symbol}" if symbol.startswith('6') else f"sz.{symbol}"
+        """根据股票代码前缀判断市场。"""
+        if symbol.startswith('6'):
+            return f"sh.{symbol}"
+        elif symbol.startswith('0') or symbol.startswith('3'):
+            return f"sz.{symbol}"
+        elif symbol.startswith('8') or symbol.startswith('4') or symbol.startswith('9'):
+            return f"bj.{symbol}"
+        return f"sz.{symbol}"
 
     def fetch_bars(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         """获取并标准化日线数据。"""
@@ -36,7 +45,7 @@ class BaostockSource(BaseSource):
             frequency="d", adjustflag="3"
         )
         if rs.error_code != '0': # type: ignore
-            print(f"Baostock failed to fetch bars for {symbol}: {rs.error_msg}") # type: ignore
+            logger.warning(f"Baostock failed to fetch bars for {symbol}: {rs.error_msg}") # type: ignore
             return pd.DataFrame()
 
         df = rs.get_data() # type: ignore
@@ -62,7 +71,7 @@ class BaostockSource(BaseSource):
         # 步骤 1: 获取该股票的所有历史交易日，作为输出的“骨架”
         rs_days = bs.query_history_k_data_plus(bs_symbol, "date", start_date="1990-01-01", end_date=today_str)
         if rs_days.error_code != '0' or not rs_days.get_data().shape[0] > 0: # type: ignore
-            print(f"Baostock failed to fetch trading days for {symbol}.")
+            logger.warning(f"Baostock failed to fetch trading days for {symbol}.")
             return pd.DataFrame(), pd.DataFrame()
         
         df_days = rs_days.get_data() # type: ignore
@@ -72,7 +81,7 @@ class BaostockSource(BaseSource):
         # 步骤 2: 获取所有除权除息日的“单次调整比例”
         rs_factor = bs.query_adjust_factor(code=bs_symbol, start_date="1990-01-01", end_date=today_str)
         if rs_factor.error_code != '0':
-            print(f"Baostock failed to fetch adjust factor for {symbol}: {rs_factor.error_msg}")
+            logger.warning(f"Baostock failed to fetch adjust factor for {symbol}: {rs_factor.error_msg}")
             return pd.DataFrame(), pd.DataFrame()
         
         factor_events = []
