@@ -8,3 +8,6 @@ venv/
 
 # Database
 *.db
+
+# Data
+*.csv
