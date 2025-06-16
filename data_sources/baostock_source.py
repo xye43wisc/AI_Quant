@@ -36,6 +36,8 @@ class BaostockSource(BaseSource):
     def fetch_bars(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         """获取并标准化日线数据。"""
         bs_symbol = self._convert_symbol_format(symbol)
+        if bs_symbol.startswith('bj.'):
+            pass  # Baostock 不支持北交所股票
         start_date_bs = pd.to_datetime(start_date).strftime('%Y-%m-%d')
         end_date_bs = pd.to_datetime(end_date).strftime('%Y-%m-%d')
         
@@ -66,6 +68,8 @@ class BaostockSource(BaseSource):
         [最终方案] 使用 bs.query_adjust_factor() 获取因子，并转换为每日累乘因子序列。
         """
         bs_symbol = self._convert_symbol_format(symbol)
+        if bs_symbol.startswith('bj.'):
+            pass  # Baostock 不支持北交所股票
         today_str = date.today().strftime("%Y-%m-%d")
 
         # 步骤 1: 获取该股票的所有历史交易日，作为输出的“骨架”
