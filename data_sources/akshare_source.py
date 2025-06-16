@@ -8,6 +8,10 @@ from .base_source import BaseSource
 class AkshareSource(BaseSource):
     """使用 Akshare 作为数据源的实现。"""
 
+    @property
+    def name(self) -> str:
+        return 'akshare'
+
     def login(self):
         # Akshare 不需要登录
         print("Akshare source does not require login.")

@@ -15,19 +15,20 @@ def update_bar_for_symbol(
     session: Session,
     bar_model_class,
     last_date: Optional[str],
-    start_date_override: Optional[str] = None
+    start_date_override: Optional[str] = None,
+    end_date_override: Optional[str] = None
 ):
     """为单个 symbol 更新日线数据。在循环外部处理 session commit。"""
     first = start_date_override or last_date or date(2010, 1, 1).strftime("%Y%m%d")
-    today = date.today().strftime("%Y%m%d")
+    end = end_date_override or date.today().strftime("%Y%m%d")
 
-    if first >= today:
+    if first >= end:
         return
     
-    df_raw = source.fetch_bars(symbol, start_date=first, end_date=today)
+    df_raw = source.fetch_bars(symbol, start_date=first, end_date=end)
     if not df_raw.empty:
         upsert_bars(df_raw, symbol, session, bar_model_class)
-        logger.info(f"[{source.name}/{symbol}]: Fetched and staged {len(df_raw)} new bars from {first}.") # type: ignore
+        logger.info(f"[{source.name}/{symbol}]: Fetched and staged {len(df_raw)} new bars from {first} to {end}.") # type: ignore
 
 def update_factor_for_symbol(
     symbol: str,

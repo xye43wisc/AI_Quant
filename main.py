@@ -58,7 +58,7 @@ def run_update_bar(args):
         count = 0
         for sym in tqdm(symbols, desc=f"Updating Bars ({source_name})"):
             try:
-                update_bar_for_symbol(sym, source, session, BarModel, last_dates.get(sym), args.start_date)
+                update_bar_for_symbol(sym, source, session, BarModel, last_dates.get(sym), args.start_date, args.end_date)
             except Exception:
                 logger.error(f"处理股票 {sym} 日线数据时失败。", exc_info=True)
             count += 1
@@ -178,6 +178,7 @@ def main():
     p_bar.add_argument("symbols", nargs="*", default=["all"])
     p_bar.add_argument("--source", type=str, default="akshare", choices=['akshare', 'baostock'])
     p_bar.add_argument("--start-date", type=str)
+    p_bar.add_argument("--end-date", type=str, default=date.today().strftime("%Y%m%d"))
     p_bar.set_defaults(func=run_update_bar)
     p_factor = up_sub.add_parser("factor", help="更新复权因子")
     p_factor.add_argument("symbols", nargs="*", default=["all"])
