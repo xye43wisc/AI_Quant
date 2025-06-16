@@ -30,3 +30,9 @@ class CleaningLog(Base):
     __tablename__ = "cleaning_log"
     symbol            = Column(String(10), primary_key=True, nullable=False)
     last_cleaned_date = Column(Date, nullable=False)
+
+# 新增 SuspensionInfo 模型
+class SuspensionInfo(Base):
+    __tablename__ = "suspension_info"
+    symbol          = Column(String(10), nullable=False, primary_key=True)
+    suspension_date = Column(Date, nullable=False, primary_key=True)
