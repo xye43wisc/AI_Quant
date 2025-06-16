@@ -1,7 +1,7 @@
-# suspension_updater.py (超简化最终版)
+# suspension_updater.py
 import akshare as ak
 import pandas as pd
-from datetime import date, timedelta
+from datetime import timedelta
 from sqlalchemy.dialects.postgresql import insert
 from tqdm import tqdm
 
@@ -9,7 +9,7 @@ from storage import Session
 from models import SuspensionInfo
 from cleaner import get_trade_calendar
 
-def update_suspension_data(start_date_str: str, end_date_str: str):
+def update_suspension_data(start_date_str: str, end_date_str: str): # 函数名统一
     """
     根据API的新理解（一次性获取从start_date到当下的所有数据），
     执行一次性全量更新。
@@ -18,14 +18,14 @@ def update_suspension_data(start_date_str: str, end_date_str: str):
     try:
         print(f"[*] 开始一次性获取自 {start_date_str} 以来的所有停复牌公告...")
         
-        # 1. 一次API调用获取所有数据
-        df = ak.stock_tfp_em(date=start_date_str)
+        df = ak.stock_tfp_em(date=start_date_str) # akshare是目前停牌数据的唯一来源
         print(f"[+] API 调用成功！共找到 {len(df)} 条历史公告。")
 
         if df.empty:
             print("未找到任何停复牌公告。")
             return
 
+        # ... 其余逻辑保持不变 ...
         script_end_date = pd.to_datetime(end_date_str).date()
         trade_dates_df = get_trade_calendar()
         all_records = []
@@ -33,7 +33,6 @@ def update_suspension_data(start_date_str: str, end_date_str: str):
         print("[*] 开始解析所有公告...")
         for _, row in tqdm(df.iterrows(), total=len(df), desc="解析公告"):
             try:
-                # 2. 保留之前版本中稳定可靠的解析逻辑
                 suspension_start_dt = pd.to_datetime(row.get('停牌时间')).date() # type: ignore
                 symbol = row['代码']
                 suspension_duration = row.get('停牌期限')
@@ -54,12 +53,10 @@ def update_suspension_data(start_date_str: str, end_date_str: str):
             except Exception:
                 continue
         
-        # 3. 批量写入数据库
         if all_records:
             unique_records = [dict(t) for t in {tuple(d.items()) for d in all_records}]
             print(f"[*] 共解析出 {len(unique_records)} 条在指定范围内的停牌日期记录。")
             
-            # 为保证数据干净，先清空旧数据
             print("[!] 正在清空旧的停牌数据...")
             session.query(SuspensionInfo).delete()
             session.commit()

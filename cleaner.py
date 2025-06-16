@@ -1,11 +1,11 @@
 # cleaner.py
 import pandas as pd
 import akshare as ak
-from sqlalchemy.orm import Session as SessionType
+from sqlalchemy.orm import Session as SessionType, session
 from sqlalchemy import asc, desc
 from pandas import read_sql_query
-from storage import Session, update_cleaning_log
-from models import DailyBar, AdjFactor, SuspensionInfo # 导入 SuspensionInfo
+from storage import update_cleaning_log
+from models import SuspensionInfo
 from typing import List, Dict, Any, Optional
 from datetime import date
 
@@ -14,34 +14,31 @@ _trade_date_cache = None
 def get_trade_calendar() -> pd.DataFrame:
     global _trade_date_cache
     if _trade_date_cache is None:
-        print("首次运行，正在从 akshare 获取市场交易日历...")
         try:
             df = ak.tool_trade_date_hist_sina()
             df['trade_date'] = pd.to_datetime(df['trade_date']).dt.date
             _trade_date_cache = df
-            print("交易日历获取成功。")
         except Exception as e:
-            print(f"获取交易日历失败: {e}")
             return pd.DataFrame(columns=['trade_date'])
     return _trade_date_cache
 
-def get_data_for_cleaning(symbol: str, start_date: Optional[date], session: SessionType) -> pd.DataFrame:
-    query = session.query(DailyBar).filter(DailyBar.symbol == symbol)
+def get_data_for_cleaning(symbol: str, session: SessionType, bar_model_class, start_date: Optional[date]) -> pd.DataFrame:
+    query = session.query(bar_model_class).filter(bar_model_class.symbol == symbol)
     if start_date:
-        previous_day_query = session.query(DailyBar.trade_date)\
-            .filter(DailyBar.symbol == symbol, DailyBar.trade_date < start_date)\
-            .order_by(desc(DailyBar.trade_date)).limit(1).scalar_subquery()
-        query = query.filter(DailyBar.trade_date >= previous_day_query)
-    query = query.order_by(asc(DailyBar.trade_date))
+        # 获取不早于上次清洗日前一天的数据
+        previous_day_query = session.query(bar_model_class.trade_date)\
+            .filter(bar_model_class.symbol == symbol, bar_model_class.trade_date < start_date)\
+            .order_by(desc(bar_model_class.trade_date)).limit(1).scalar_subquery()
+        query = query.filter(bar_model_class.trade_date >= previous_day_query)
+    query = query.order_by(asc(bar_model_class.trade_date))
     return read_sql_query(query.statement, query.session.bind) # type: ignore
 
-def get_adj_factors(symbol: str, session: SessionType) -> pd.DataFrame:
-    query = session.query(AdjFactor).filter(AdjFactor.symbol == symbol).order_by(asc(AdjFactor.trade_date))
+def get_adj_factors(symbol: str, session: SessionType, factor_model_class) -> pd.DataFrame:
+    query = session.query(factor_model_class).filter(factor_model_class.symbol == symbol).order_by(asc(factor_model_class.trade_date))
     return read_sql_query(query.statement, query.session.bind) # type: ignore
 
 def get_suspension_dates(symbol: str, session: SessionType) -> set:
-    results = session.query(SuspensionInfo.suspension_date)\
-        .filter(SuspensionInfo.symbol == symbol).all()
+    results = session.query(SuspensionInfo.suspension_date).filter(SuspensionInfo.symbol == symbol).all()
     return {r[0] for r in results}
 
 def find_data_issues(daily_df: pd.DataFrame, factor_df: pd.DataFrame, suspension_dates: set, check_from_date: Optional[date]) -> List[Dict[str, Any]]:
@@ -77,29 +74,26 @@ def find_data_issues(daily_df: pd.DataFrame, factor_df: pd.DataFrame, suspension
                 issues.append({'date': missing_date.strftime('%Y-%m-%d'), 'issue': '数据不连续', 'severity': 'Error', 'details': '该交易日数据缺失'}) # type: ignore
     return issues
 
-def clean_symbol(symbol: str, last_cleaned_date: Optional[date], full_recheck: bool) -> List[Dict[str, Any]]:
-    session = Session()
+def clean_symbol(symbol: str, source_name: str, session: SessionType, bar_model, factor_model, last_cleaned_date: Optional[date], full_recheck: bool) -> List[Dict[str, Any]]:
     all_issues = []
-    try:
-        start_date = None if full_recheck else last_cleaned_date
-        daily_df = get_data_for_cleaning(symbol, start_date, session)
-        factor_df = get_adj_factors(symbol, session)
-        suspension_dates = get_suspension_dates(symbol, session)
-        if daily_df.empty or (start_date and len(daily_df) <= 1):
-            return []
-        check_from_date = daily_df['trade_date'].min() if full_recheck or not last_cleaned_date else last_cleaned_date
-        issues = find_data_issues(daily_df, factor_df, suspension_dates, check_from_date)
-        if issues:
-            for issue in issues:
-                issue['symbol'] = symbol
-            all_issues.extend(issues)
-            print(f"--- 发现 {symbol} 的 {len(issues)} 个问题 ---")
-        latest_date = daily_df['trade_date'].max()
-        update_cleaning_log(symbol, latest_date, session)
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        print(f"清洗 {symbol} 时发生错误: {e}")
-    finally:
-        session.close()
+    start_date = None if full_recheck else last_cleaned_date
+    
+    daily_df = get_data_for_cleaning(symbol, session, bar_model, start_date)
+    if daily_df.empty or (start_date and len(daily_df) <= 1):
+        return []
+        
+    factor_df = get_adj_factors(symbol, session, factor_model)
+    suspension_dates = get_suspension_dates(session) # type: ignore
+    
+    check_from_date = daily_df['trade_date'].min() if full_recheck or not last_cleaned_date else last_cleaned_date
+    issues = find_data_issues(daily_df, factor_df, suspension_dates, check_from_date)
+    
+    if issues:
+        for issue in issues:
+            issue['symbol'] = symbol
+        all_issues.extend(issues)
+
+    latest_date = daily_df['trade_date'].max()
+    # 调用更新后的日志函数，传入 source_name
+    update_cleaning_log(symbol, source_name, latest_date, session)
     return all_issues
