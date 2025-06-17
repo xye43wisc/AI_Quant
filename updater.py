@@ -28,7 +28,8 @@ def update_bar_for_symbol(
     df_raw = source.fetch_bars(symbol, start_date=first, end_date=end)
     if not df_raw.empty:
         upsert_bars(df_raw, symbol, session, bar_model_class)
-        logger.info(f"[{source.name}/{symbol}]: Fetched and staged {len(df_raw)} new bars from {first} to {end}.") # type: ignore
+        # 此处的日志已被移除
+        # logger.info(f"[{source.name}/{symbol}]: Fetched and staged {len(df_raw)} new bars from {first} to {end}.")
 
 def update_factor_for_symbol(
     symbol: str,
@@ -45,4 +46,5 @@ def update_factor_for_symbol(
     df_factor = pd.merge(df_q, df_h, on="trade_date", how="outer").dropna()
     if not df_factor.empty:
         upsert_factors(df_factor, symbol, session, factor_model_class)
-        logger.info(f"[{source.name}/{symbol}]: Fetched and staged {len(df_factor)} factor records.") # type: ignore
+        # 此处的日志已被移除
+        # logger.info(f"[{source.name}/{symbol}]: Fetched and staged {len(df_factor)} factor records.")

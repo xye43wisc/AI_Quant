@@ -53,20 +53,35 @@ def run_update_bar(args):
     from storage import get_all_last_dates
     logger.info(f"正从数据库 (表: {BarModel.__tablename__}) 获取最后更新日期...")
     last_dates = get_all_last_dates(session, BarModel)
+    
+    failed_symbols = [] # 1. 初始化失败记录列表
+    
     source.login()
     try:
         count = 0
         for sym in tqdm(symbols, desc=f"Updating Bars ({source_name})"):
             try:
                 update_bar_for_symbol(sym, source, session, BarModel, last_dates.get(sym), args.start_date, args.end_date)
-            except Exception:
-                logger.error(f"处理股票 {sym} 日线数据时失败。", exc_info=True)
+            except Exception as e:
+                logger.error(f"处理股票 {sym} 日线数据时失败。", exc_info=True) # 保留详细错误日志
+                failed_symbols.append({'symbol': sym, 'reason': str(e)}) # 2. 记录失败信息
+            
             count += 1
             if count % 200 == 0:
                 session.commit()
-                tqdm.write(f"\n阶段性提交：已处理 {count} 个股票的数据。")
+                # 3. 定期报告进度
+                tqdm.write(f"进度：已处理 {count}/{len(symbols)} 个股票。")
+        
         session.commit()
-        logger.info("日线数据更新完成。部分股票可能失败，详情请查看日志。")
+        
+        # 4. 生成任务摘要
+        if failed_symbols:
+            logger.warning(f"日线数据更新完成，共有 {len(failed_symbols)} 个股票失败。")
+            summary_df = pd.DataFrame(failed_symbols).set_index('symbol')
+            logger.warning("失败汇总如下:\n" + summary_df.to_string())
+        else:
+            logger.info("日线数据更新完成，所有股票均无错误。")
+
     except Exception as e:
         session.rollback()
         logger.critical("日线更新过程中发生严重错误，事务已回滚。", exc_info=True)
@@ -80,15 +95,34 @@ def run_update_factor(args):
     FactorModel = get_model('factor', source_name)
     source = get_data_source(source_name)
     session = Session()
+    
+    failed_symbols = [] # 1. 初始化失败记录列表
+    
     source.login()
     try:
+        count = 0
         for sym in tqdm(symbols, desc=f"Updating Factors ({source_name})"):
             try:
                 update_factor_for_symbol(sym, source, session, FactorModel)
-            except Exception:
-                logger.error(f"处理股票 {sym} 复权因子时失败。", exc_info=True)
+            except Exception as e:
+                logger.error(f"处理股票 {sym} 复权因子时失败。", exc_info=True) # 保留详细错误日志
+                failed_symbols.append({'symbol': sym, 'reason': str(e)}) # 2. 记录失败信息
+            
+            count += 1
+            if count % 200 == 0:
+                # 复权因子更新也可以定期报告
+                tqdm.write(f"进度：已处理 {count}/{len(symbols)} 个股票。")
+
         session.commit()
-        logger.info("复权因子更新完成。部分股票可能失败，详情请查看日志。")
+
+        # 4. 生成任务摘要
+        if failed_symbols:
+            logger.warning(f"复权因子更新完成，共有 {len(failed_symbols)} 个股票失败。")
+            summary_df = pd.DataFrame(failed_symbols).set_index('symbol')
+            logger.warning("失败汇总如下:\n" + summary_df.to_string())
+        else:
+            logger.info("复权因子更新完成，所有股票均无错误。")
+
     except Exception as e:
         session.rollback()
         logger.critical("复权因子更新过程中发生严重错误，事务已回滚。", exc_info=True)
