@@ -8,6 +8,7 @@ venv313/
 
 # Database
 *.db
+.DS_Store
 
 # Data
 *.csv
